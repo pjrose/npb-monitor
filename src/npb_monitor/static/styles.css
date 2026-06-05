@@ -622,6 +622,47 @@ input.profile-loaded {
   margin-bottom: 12px;
 }
 
+.chart-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-indicator {
+  width: 14px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+.legend-indicator.voltage {
+  background-color: var(--cyan);
+}
+
+.legend-indicator.current {
+  background-color: var(--amber);
+}
+
+.legend-indicator.transition {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--red);
+}
+
 .button-row.compact {
   flex-wrap: wrap;
 }
@@ -701,6 +742,10 @@ input.profile-loaded {
   .chart-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .chart-legend {
+    margin: 8px 0;
   }
 }
 
