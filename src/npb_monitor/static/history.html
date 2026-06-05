@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NPB-450 History</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="shell chart-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Last 24 hours</p>
+          <h1>Charge History</h1>
+        </div>
+        <div class="status-strip">
+          <a class="nav-pill" href="/">Console</a>
+          <span id="historyCount" class="pill">No samples</span>
+          <span id="visibleRange" class="pill">24h</span>
+        </div>
+      </header>
+
+      <section class="chart-panel">
+        <div class="chart-toolbar">
+          <div class="button-row compact">
+            <button data-range="1">1h</button>
+            <button data-range="6">6h</button>
+            <button data-range="12">12h</button>
+            <button data-range="24">24h</button>
+          </div>
+          <div class="button-row compact">
+            <button id="zoomIn">Zoom in</button>
+            <button id="zoomOut">Zoom out</button>
+            <button id="resetView">Reset</button>
+            <button id="exportPng">PNG</button>
+            <button id="exportCsv">CSV</button>
+          </div>
+        </div>
+        <canvas id="historyChart" width="1400" height="680"></canvas>
+        <div class="chart-help">
+          <span>Mouse wheel zooms around the pointer.</span>
+          <span>Drag left/right to scroll time.</span>
+          <span>Vertical markers are status-bit transitions.</span>
+        </div>
+      </section>
+
+      <section class="grid two">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Visible Events</h2>
+            <span class="summary">CC, CV, float, finished, and related transitions</span>
+          </div>
+          <div id="chartEvents" class="event-list tall"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Readout</h2>
+            <span class="summary">Nearest point under pointer</span>
+          </div>
+          <div id="readout" class="readout">Move over the chart</div>
+        </section>
+      </section>
+    </main>
+    <script src="/static/history.js"></script>
+  </body>
+</html>
+

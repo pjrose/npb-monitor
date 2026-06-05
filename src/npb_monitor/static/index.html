@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NPB-450 Monitor</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Mean Well NPB-450-24NFC</p>
+          <h1>Charge Console</h1>
+        </div>
+        <div class="status-strip">
+          <a class="nav-pill" href="/history">24h Chart</a>
+          <span id="mqttPill" class="pill">MQTT</span>
+          <span id="wicanPill" class="pill">WiCAN</span>
+          <span id="rxPill" class="pill">RX</span>
+        </div>
+      </header>
+
+      <section class="dashboard">
+        <div class="hero-panel">
+          <div class="battery">
+            <div class="battery-cap"></div>
+            <div class="battery-body">
+              <div id="batteryFill" class="battery-fill"></div>
+              <span id="batteryVoltage">-- V</span>
+            </div>
+          </div>
+          <div class="hero-stats">
+            <span id="chargeMode" class="mode">Unknown mode</span>
+            <strong id="outputPower">-- W</strong>
+            <small>Output power</small>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric">
+            <span>Output voltage</span>
+            <strong id="outputVoltage">--</strong>
+          </article>
+          <article class="metric">
+            <span>Output current</span>
+            <strong id="outputCurrent">--</strong>
+          </article>
+          <article class="metric">
+            <span>Temperature</span>
+            <strong id="temperature">--</strong>
+          </article>
+          <article class="metric">
+            <span>Target voltage</span>
+            <strong id="targetVoltage">--</strong>
+          </article>
+          <article class="metric">
+            <span>Target current</span>
+            <strong id="targetCurrent">--</strong>
+          </article>
+          <article class="metric">
+            <span>Operation</span>
+            <strong id="operationState">--</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="grid two">
+        <section class="panel controls">
+          <div class="panel-title">
+            <h2>Output Control</h2>
+            <button data-action="poll" class="ghost">Poll now</button>
+          </div>
+          <div class="button-row">
+            <button data-action="operation" data-enabled="true" class="good">Turn on</button>
+            <button data-action="operation" data-enabled="false" class="danger">Turn off</button>
+          </div>
+          <form data-control="set_psu_voltage" class="control-row">
+            <label for="psuVoltage">PSU voltage</label>
+            <input id="psuVoltage" name="value" type="number" min="21" max="42" step="0.1" value="28.4">
+            <button>Set</button>
+          </form>
+          <form data-control="set_psu_current" class="control-row">
+            <label for="psuCurrent">PSU current</label>
+            <input id="psuCurrent" name="value" type="number" min="0" max="13.5" step="0.1" value="5.0">
+            <button>Set</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Status Flags</h2>
+            <span id="faultSummary" class="summary">Waiting for readback</span>
+          </div>
+          <div id="flags" class="flag-list"></div>
+        </section>
+      </section>
+
+      <section class="grid two">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Charge Curve</h2>
+            <span class="summary">Charger-mode parameters</span>
+          </div>
+          <form data-control="set_curve_cc" class="control-row">
+            <label>CC current</label>
+            <input name="value" type="number" min="1.1" max="13.5" step="0.1" value="5.0">
+            <button>Set</button>
+          </form>
+          <form data-control="set_curve_cv" class="control-row">
+            <label>CV voltage</label>
+            <input name="value" type="number" min="21" max="42" step="0.1" value="28.4">
+            <button>Set</button>
+          </form>
+          <form data-control="set_curve_float" class="control-row">
+            <label>Float voltage</label>
+            <input name="value" type="number" min="21" max="42" step="0.1" value="27.2">
+            <button>Set</button>
+          </form>
+          <form data-control="set_curve_taper" class="control-row">
+            <label>Taper current</label>
+            <input name="value" type="number" min="0.11" max="1.65" step="0.01" value="0.55">
+            <button>Set</button>
+          </form>
+          <form data-control="set_restart_voltage" class="control-row">
+            <label>Restart voltage</label>
+            <input name="value" type="number" min="21" max="42" step="0.1" value="26.4">
+            <button>Set</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Mode and Config</h2>
+            <span class="summary">Some changes require AC power-cycle</span>
+          </div>
+          <div class="button-stack">
+            <button data-action="initialize_psu">Initialize PSU mode</button>
+            <button data-action="charger_mode_default">Set charger mode default</button>
+            <button data-action="disable_eeprom_writes">Enable CAN control</button>
+          </div>
+          <div class="split-forms">
+            <form data-control="curve_config_raw" class="raw-small">
+              <label>CURVE_CONFIG</label>
+              <input name="low" value="0x04">
+              <input name="high" value="0x00">
+              <button>Write</button>
+            </form>
+            <form data-control="system_config_raw" class="raw-small">
+              <label>SYSTEM_CONFIG</label>
+              <input name="low" value="0x03">
+              <input name="high" value="0x04">
+              <button>Write</button>
+            </form>
+          </div>
+        </section>
+      </section>
+
+      <section class="grid two">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Raw CAN</h2>
+            <span id="canIds" class="summary">Loading IDs</span>
+          </div>
+          <form id="rawForm" class="raw-form">
+            <input name="can_id" value="0xC0103" aria-label="CAN ID">
+            <input name="data" value="0x60 0x00" aria-label="CAN data bytes">
+            <button>Send</button>
+          </form>
+          <form data-control="read_command" class="raw-form">
+            <input name="command" value="0x0060" aria-label="Command">
+            <button>Read command</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Events</h2>
+            <span id="lastSeen" class="summary">No traffic yet</span>
+          </div>
+          <div id="events" class="event-list"></div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <div class="panel-title">
+          <h2>Frame Log</h2>
+          <span class="summary">Recent MQTT/CAN traffic</span>
+        </div>
+        <div id="frames" class="frames"></div>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
