@@ -29,7 +29,33 @@ class StateHistoryTests(unittest.TestCase):
         self.assertIn("Constant voltage active", messages)
         self.assertTrue(all(event["annotate"] for event in events))
 
+    def test_snapshot_marks_missing_readbacks_stale(self):
+        state = MonitorState()
+
+        snapshot = state.snapshot()
+
+        self.assertTrue(snapshot["readings_meta"]["output_voltage_v"]["stale"])
+        self.assertTrue(any(alert["id"] == "no_rx" for alert in snapshot["alerts"]))
+
+    def test_pause_and_session_summary_are_reported(self):
+        state = MonitorState()
+        state.set_data_exchange_paused(True)
+        state.record_decoded(protocol.decode_frame(0xC0003, [0x60, 0x00, 0x60, 0x09], expected_address=0x03))
+        state.record_decoded(protocol.decode_frame(0xC0003, [0x61, 0x00, 0xF4, 0x01], expected_address=0x03))
+
+        snapshot = state.snapshot()
+
+        self.assertTrue(snapshot["data_exchange_paused"])
+        self.assertEqual(snapshot["session"]["sample_count"], 1)
+        self.assertAlmostEqual(snapshot["session"]["max_power_w"], 120.0)
+
+    def test_clear_notice(self):
+        state = MonitorState()
+        state.add_notice("charge_curve_activation", "warning", "Title", "Message")
+        self.assertEqual(len(state.notices), 1)
+        state.clear_notice("charge_curve_activation")
+        self.assertEqual(len(state.notices), 0)
+
 
 if __name__ == "__main__":
     unittest.main()
-

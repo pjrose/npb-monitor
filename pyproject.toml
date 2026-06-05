@@ -9,15 +9,16 @@ description = "Web monitor and control interface for Mean Well NPB chargers via 
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+  "amqtt>=0.11.3",
   "paho-mqtt>=2.1.0",
 ]
 
 [project.scripts]
 npb-monitor = "npb_monitor.server:main"
+npb-probe = "npb_monitor.probe:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 npb_monitor = ["static/*"]
-

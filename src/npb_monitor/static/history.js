@@ -180,6 +180,8 @@ function drawLine(points, field, min, max, area, color) {
 
 function drawEvents(area) {
   ctx.save();
+  let lastLabelX = -Infinity;
+  let labelSlot = 0;
   visibleEvents().forEach((event) => {
     const x = timeToX(event.ts, area);
     ctx.strokeStyle = event.value ? colors.event : colors.grid;
@@ -188,12 +190,15 @@ function drawEvents(area) {
     ctx.moveTo(x, area.top);
     ctx.lineTo(x, area.bottom);
     ctx.stroke();
-    ctx.translate(x + 4, area.top + 8);
-    ctx.rotate(-Math.PI / 2);
-    ctx.fillStyle = event.value ? colors.event : colors.muted;
-    ctx.font = "12px sans-serif";
-    ctx.fillText(event.message, -150, 0);
-    ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+    if (x - lastLabelX >= 110) {
+      const label = event.message.length > 34 ? `${event.message.slice(0, 31)}...` : event.message;
+      const y = area.top + 14 + labelSlot * 18;
+      ctx.fillStyle = event.value ? colors.event : colors.muted;
+      ctx.font = "12px sans-serif";
+      ctx.fillText(label, Math.min(x + 6, area.right - 210), y);
+      lastLabelX = x;
+      labelSlot = (labelSlot + 1) % 4;
+    }
   });
   ctx.restore();
   ctx.setLineDash([]);
@@ -305,4 +310,3 @@ window.addEventListener("resize", draw);
 
 loadHistory().catch(console.error);
 setInterval(() => loadHistory().catch(console.error), 5000);
-

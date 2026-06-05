@@ -7,14 +7,17 @@ from dataclasses import dataclass
 class AppConfig:
     http_host: str = "127.0.0.1"
     http_port: int = 8088
-    mqtt_host: str = "192.168.4.73"
+    mqtt_host: str = "127.0.0.1"
     mqtt_port: int = 1883
     mqtt_username: str | None = None
     mqtt_password: str | None = None
+    embedded_mqtt: bool = True
+    broker_bind_host: str = "0.0.0.0"
+    broker_port: int = 1883
     tx_topic: str = "wican/f412fa2e9d59/can/tx"
     rx_topic: str = "wican/f412fa2e9d59/can/rx"
-    status_topic: str = "wican/f412fa2e9d59/can/stat"
-    device_address: int = 0x03
+    status_topic: str = "wican/f412fa2e9d59/can/status"
+    device_address: int = 0x00
     mqtt_enabled: bool = True
     poll_interval_s: float = 1.0
     packet_gap_s: float = 0.05
@@ -26,4 +29,3 @@ class AppConfig:
     @property
     def charger_can_id(self) -> int:
         return 0x000C0000 | self.device_address
-

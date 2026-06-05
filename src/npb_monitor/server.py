@@ -11,10 +11,14 @@ from urllib.parse import urlparse
 
 from .bridge import WicanBridge
 from .config import AppConfig
+from .mqtt_broker import EmbeddedMqttBroker
+from .profiles import profile_payload
 from .protocol import COMMANDS, parse_raw_bytes
+from .session_log import SessionLogger
 from .state import MonitorState
 
 STATIC_DIR = Path(__file__).with_name("static")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class NpbRequestHandler(BaseHTTPRequestHandler):
@@ -39,6 +43,8 @@ class NpbRequestHandler(BaseHTTPRequestHandler):
             self._send_json(self.state.snapshot())
         elif path == "/api/history":
             self._send_json(self.state.history_snapshot())
+        elif path == "/api/session":
+            self._send_json(self.state.session_summary())
         elif path == "/api/history.csv":
             self._send_history_csv()
         elif path == "/api/config":
@@ -46,6 +52,9 @@ class NpbRequestHandler(BaseHTTPRequestHandler):
                 {
                     "mqtt_host": self.config.mqtt_host,
                     "mqtt_port": self.config.mqtt_port,
+                    "embedded_mqtt": self.config.embedded_mqtt,
+                    "broker_bind_host": self.config.broker_bind_host,
+                    "broker_port": self.config.broker_port,
                     "tx_topic": self.config.tx_topic,
                     "rx_topic": self.config.rx_topic,
                     "status_topic": self.config.status_topic,
@@ -56,6 +65,8 @@ class NpbRequestHandler(BaseHTTPRequestHandler):
             )
         elif path == "/api/commands":
             self._send_json({f"0x{code:04X}": asdict(spec) for code, spec in COMMANDS.items()})
+        elif path == "/api/profiles":
+            self._send_json(profile_payload())
         else:
             self.send_error(404)
 
@@ -82,6 +93,7 @@ class NpbRequestHandler(BaseHTTPRequestHandler):
         if action == "operation":
             self.bridge.set_operation(bool(body["enabled"]))
             self.state.add_event("control", f"requested operation {'on' if body['enabled'] else 'off'}")
+            self.state.clear_notice("charge_curve_activation")
         elif action == "set_psu_voltage":
             self.bridge.publish_scaled_write(0x0020, float(body["value"]))
             self.state.add_event("control", f"requested PSU voltage {float(body['value']):.2f} V")
@@ -91,15 +103,19 @@ class NpbRequestHandler(BaseHTTPRequestHandler):
         elif action == "set_curve_cc":
             self.bridge.publish_scaled_write(0x00B0, float(body["value"]))
             self.state.add_event("control", f"requested charge CC {float(body['value']):.2f} A")
+            self._notice_charge_curve_activation()
         elif action == "set_curve_cv":
             self.bridge.publish_scaled_write(0x00B1, float(body["value"]))
             self.state.add_event("control", f"requested charge CV {float(body['value']):.2f} V")
+            self._notice_charge_curve_activation()
         elif action == "set_curve_float":
             self.bridge.publish_scaled_write(0x00B2, float(body["value"]))
             self.state.add_event("control", f"requested float voltage {float(body['value']):.2f} V")
+            self._notice_charge_curve_activation()
         elif action == "set_curve_taper":
             self.bridge.publish_scaled_write(0x00B3, float(body["value"]))
             self.state.add_event("control", f"requested taper current {float(body['value']):.2f} A")
+            self._notice_charge_curve_activation()
         elif action == "set_restart_voltage":
             self.bridge.publish_scaled_write(0x00B9, float(body["value"]))
             self.state.add_event("control", f"requested restart voltage {float(body['value']):.2f} V")
@@ -108,6 +124,12 @@ class NpbRequestHandler(BaseHTTPRequestHandler):
             high = int(body["high"], 0) if isinstance(body["high"], str) else int(body["high"])
             self.bridge.publish_raw_write(0x00B4, low | (high << 8))
             self.state.add_event("control", f"requested CURVE_CONFIG low=0x{low:02X} high=0x{high:02X}")
+            self.state.add_notice(
+                "curve_config_ac_cycle",
+                "critical",
+                "AC power cycle required",
+                "CURVE_CONFIG 0x00B4 was written. The manual says 0x00B4 changes take effect only after AC input is power-cycled.",
+            )
         elif action == "system_config_raw":
             low = int(body["low"], 0) if isinstance(body["low"], str) else int(body["low"])
             high = int(body["high"], 0) if isinstance(body["high"], str) else int(body["high"])
@@ -119,12 +141,27 @@ class NpbRequestHandler(BaseHTTPRequestHandler):
             self.bridge.set_charger_mode_default()
         elif action == "disable_eeprom_writes":
             self.bridge.disable_eeprom_writes()
+        elif action == "enable_eeprom_writes":
+            self.bridge.enable_eeprom_writes()
         elif action == "read_command":
             command = int(body["command"], 0) if isinstance(body["command"], str) else int(body["command"])
             self.bridge.publish_read(command)
+        elif action == "scan_addresses":
+            self.bridge.scan_addresses()
+        elif action == "set_paused":
+            paused = bool(body["paused"])
+            self.state.set_data_exchange_paused(paused)
         else:
             raise ValueError(f"Unknown control action: {action}")
         return {"ok": True}
+
+    def _notice_charge_curve_activation(self) -> None:
+        self.state.add_notice(
+            "charge_curve_activation",
+            "warning",
+            "Charge curve change pending activation",
+            "In charger mode, CURVE_CC/CV/FV/TC changes do not take effect immediately while output is on. Apply by AC power-cycle, remote on/off, or communication Operation off/on.",
+        )
 
     def _handle_raw(self, body: dict[str, Any]) -> dict[str, Any]:
         can_id = int(body.get("can_id", self.config.controller_can_id), 0) if isinstance(body.get("can_id"), str) else int(body.get("can_id", self.config.controller_can_id))
@@ -194,14 +231,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Mean Well NPB web monitor via WiCAN MQTT")
     parser.add_argument("--http-host", default="127.0.0.1")
     parser.add_argument("--http-port", type=int, default=8088)
-    parser.add_argument("--mqtt-host", default="192.168.4.73")
+    parser.add_argument("--mqtt-host", default="127.0.0.1")
     parser.add_argument("--mqtt-port", type=int, default=1883)
     parser.add_argument("--mqtt-username")
     parser.add_argument("--mqtt-password")
+    parser.add_argument("--no-embedded-mqtt", action="store_true")
+    parser.add_argument("--broker-bind-host", default="0.0.0.0")
+    parser.add_argument("--broker-port", type=int, default=1883)
     parser.add_argument("--tx-topic", default="wican/f412fa2e9d59/can/tx")
     parser.add_argument("--rx-topic", default="wican/f412fa2e9d59/can/rx")
-    parser.add_argument("--status-topic", default="wican/f412fa2e9d59/can/stat")
-    parser.add_argument("--device-address", type=lambda text: int(text, 0), default=0x03)
+    parser.add_argument("--status-topic", default="wican/f412fa2e9d59/can/status")
+    parser.add_argument("--device-address", type=lambda text: int(text, 0), default=0x00)
     parser.add_argument("--poll-interval", type=float, default=1.0)
     parser.add_argument("--no-mqtt", action="store_true")
     return parser
@@ -216,6 +256,9 @@ def main() -> None:
         mqtt_port=args.mqtt_port,
         mqtt_username=args.mqtt_username,
         mqtt_password=args.mqtt_password,
+        embedded_mqtt=not args.no_embedded_mqtt,
+        broker_bind_host=args.broker_bind_host,
+        broker_port=args.broker_port,
         tx_topic=args.tx_topic,
         rx_topic=args.rx_topic,
         status_topic=args.status_topic,
@@ -224,21 +267,29 @@ def main() -> None:
         poll_interval_s=args.poll_interval,
     )
     state = MonitorState()
+    broker = EmbeddedMqttBroker(config, state)
+    broker.start()
     bridge = WicanBridge(config, state)
     bridge.start()
+    session_logger = SessionLogger(state, PROJECT_ROOT)
+    session_logger.start()
 
     NpbRequestHandler.bridge = bridge
     NpbRequestHandler.state = state
     NpbRequestHandler.config = config
     server = ThreadingHTTPServer((config.http_host, config.http_port), NpbRequestHandler)
     print(f"NPB monitor running at http://{config.http_host}:{config.http_port}")
-    print(f"MQTT broker {config.mqtt_host}:{config.mqtt_port}, TX {config.tx_topic}, RX {config.rx_topic}")
+    if config.embedded_mqtt:
+        print(f"Embedded MQTT broker listening on {config.broker_bind_host}:{config.broker_port}")
+    print(f"MQTT client {config.mqtt_host}:{config.mqtt_port}, TX {config.tx_topic}, RX {config.rx_topic}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         bridge.stop()
+        broker.stop()
+        session_logger.stop()
         server.server_close()
 
 

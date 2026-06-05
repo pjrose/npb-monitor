@@ -67,6 +67,12 @@ def charger_can_id(address: int) -> int:
     return 0x000C0000 | address
 
 
+def charger_address_from_can_id(can_id: int) -> int | None:
+    if 0x000C0000 <= can_id <= 0x000C0003:
+        return can_id & 0x03
+    return None
+
+
 def validate_address(address: int) -> None:
     if address < 0x00 or address > 0x03:
         raise ValueError("NPB CAN address must be in range 0x00..0x03")
@@ -136,6 +142,7 @@ def decode_frame(can_id: int, data: list[int], expected_address: int | None = No
         raise ValueError("NPB reply must contain at least command low/high bytes")
     if expected_address is not None and can_id != charger_can_id(expected_address):
         raise ValueError(f"Unexpected charger CAN ID 0x{can_id:X}")
+    device_address = charger_address_from_can_id(can_id)
 
     command = data[0] | (data[1] << 8)
     spec = COMMANDS.get(command, CommandSpec(command, f"UNKNOWN_0x{command:04X}", None, "", False, "Unknown command"))
@@ -148,6 +155,7 @@ def decode_frame(can_id: int, data: list[int], expected_address: int | None = No
 
     decoded: dict[str, Any] = {
         "can_id": can_id,
+        "device_address": device_address,
         "command": command,
         "name": spec.name,
         "raw_value": raw_value,

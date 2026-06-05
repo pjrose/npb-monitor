@@ -73,6 +73,14 @@ class WicanBridge:
         self._client.publish(self.config.tx_topic, text)
         self.state.record_tx(self.config.tx_topic, payload)
 
+    def scan_addresses(self) -> None:
+        for address in range(4):
+            can_id = protocol.controller_can_id(address)
+            for command in (0x0000, 0x0060, 0x0061, 0x00B8, 0x00C1):
+                self.publish_data(protocol.command_bytes(command), can_id=can_id)
+                time.sleep(max(self.config.packet_gap_s, 0.05))
+        self.state.add_event("diagnostic", "scanned NPB addresses 0x00..0x03")
+
     def poll_once(self) -> None:
         for command in protocol.POLL_COMMANDS:
             self.publish_read(command)
@@ -83,18 +91,34 @@ class WicanBridge:
         time.sleep(max(self.config.packet_gap_s, 0.1))
         self.publish_raw_write(0x00C2, 0x0403)
         self.state.add_event("control", "requested PSU mode, CAN control, and EEPROM write disable")
+        self.state.add_notice(
+            "curve_config_ac_cycle",
+            "critical",
+            "AC power cycle required",
+            "PSU mode was written through CURVE_CONFIG 0x00B4. The manual says 0x00B4 changes take effect only after AC input is power-cycled.",
+        )
 
     def set_charger_mode_default(self) -> None:
         self.publish_raw_write(0x00B4, 0x0084)
         self.state.add_event("control", "requested charger mode default curve config")
+        self.state.add_notice(
+            "curve_config_ac_cycle",
+            "critical",
+            "AC power cycle required",
+            "Charger mode was written through CURVE_CONFIG 0x00B4. The manual says 0x00B4 changes take effect only after AC input is power-cycled.",
+        )
 
     def disable_eeprom_writes(self) -> None:
         self.publish_raw_write(0x00C2, 0x0403)
         self.state.add_event("control", "requested CAN control and EEPROM write disable")
 
+    def enable_eeprom_writes(self) -> None:
+        self.publish_raw_write(0x00C2, 0x0003)
+        self.state.add_event("control", "requested CAN control and EEPROM write enable")
+
     def _poll_loop(self) -> None:
         while not self._stop.is_set():
-            if self._client is not None and self.state.mqtt_connected:
+            if self._client is not None and self.state.mqtt_connected and not self.state.data_exchange_paused:
                 try:
                     self.poll_once()
                 except Exception as exc:  # pragma: no cover - defensive runtime log
@@ -105,9 +129,10 @@ class WicanBridge:
         ok = int(reason_code) == 0 if not isinstance(reason_code, str) else reason_code == "Success"
         self.state.set_mqtt_connected(ok)
         if ok:
-            client.subscribe(self.config.rx_topic)
-            client.subscribe(self.config.status_topic)
-            self.state.add_event("mqtt", f"subscribed to {self.config.rx_topic}")
+            topics = self._subscription_topics()
+            for topic in topics:
+                client.subscribe(topic)
+            self.state.add_event("mqtt", f"subscribed to {', '.join(topics)}")
         else:
             self.state.add_event("mqtt", f"connect failed: {reason_code}")
 
@@ -122,7 +147,7 @@ class WicanBridge:
             return
 
         self.state.record_rx(msg.topic, payload)
-        if msg.topic == self.config.status_topic:
+        if msg.topic in self._status_topics():
             status = payload.get("status", str(payload)) if isinstance(payload, dict) else str(payload)
             self.state.set_wican_status(status)
             return
@@ -130,12 +155,31 @@ class WicanBridge:
         frames = payload.get("frame", []) if isinstance(payload, dict) else []
         for frame in frames:
             try:
+                can_id = int(frame["id"])
+                expected = self.config.device_address if can_id == self.config.charger_can_id else None
                 decoded = protocol.decode_frame(
-                    int(frame["id"]),
+                    can_id,
                     [int(byte) for byte in frame.get("data", [])],
-                    expected_address=self.config.device_address,
+                    expected_address=expected,
                 )
             except Exception as exc:
                 self.state.add_event("decode", str(exc))
                 continue
             self.state.record_decoded(decoded)
+
+    def _subscription_topics(self) -> list[str]:
+        topics = [self.config.rx_topic, *self._status_topics()]
+        out: list[str] = []
+        for topic in topics:
+            if topic not in out:
+                out.append(topic)
+        return out
+
+    def _status_topics(self) -> list[str]:
+        base = self.config.rx_topic.removesuffix("/rx")
+        return [
+            self.config.status_topic,
+            f"{base}/status",
+            f"{base}/stat",
+            self.config.rx_topic.replace("/can/rx", "/status"),
+        ]

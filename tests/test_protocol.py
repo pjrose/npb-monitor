@@ -7,6 +7,8 @@ class ProtocolTests(unittest.TestCase):
     def test_can_ids_use_extended_mean_well_address_layout(self):
         self.assertEqual(protocol.controller_can_id(0x03), 0x000C0103)
         self.assertEqual(protocol.charger_can_id(0x03), 0x000C0003)
+        self.assertEqual(protocol.charger_address_from_can_id(0x000C0002), 0x02)
+        self.assertIsNone(protocol.charger_address_from_can_id(0x000C0102))
 
     def test_read_command_is_little_endian(self):
         self.assertEqual(protocol.command_bytes(0x0060), [0x60, 0x00])
@@ -34,6 +36,7 @@ class ProtocolTests(unittest.TestCase):
         current = protocol.decode_frame(0xC0003, [0x61, 0x00, 0xF4, 0x01], expected_address=0x03)
         temp = protocol.decode_frame(0xC0003, [0x62, 0x00, 0xFA, 0x00], expected_address=0x03)
         self.assertEqual(voltage["name"], "READ_VOUT")
+        self.assertEqual(voltage["device_address"], 0x03)
         self.assertAlmostEqual(voltage["value"], 24.0)
         self.assertAlmostEqual(current["value"], 5.0)
         self.assertAlmostEqual(temp["value"], 25.0)
@@ -66,4 +69,3 @@ class ProtocolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
