@@ -2,6 +2,8 @@
 
 Web monitor and control interface for a Mean Well NPB-450-24NFC charger on a LAN via a WiCAN MQTT-to-CAN bridge.
 
+This repo also includes standalone M5 CoreS3 firmware in `firmware/m5cores3`. That build polls the charger directly over Unit CAN on Port.C, serves a phone-friendly web UI from the device at `npb.local`, displays local monitoring/control screens, controls a Unit ACSSR for 10 second charger AC input power cycles, and writes CSV charge-session logs to SD card.
+
 Defaults match the attached WiCAN configuration, except the app now runs its own MQTT broker:
 
 - PC LAN IP / WiCAN MQTT target: `192.168.4.73`
