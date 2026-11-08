@@ -2,6 +2,8 @@
 
 Web monitor and control interface for a Mean Well NPB-450-24NFC charger on a LAN via a WiCAN MQTT-to-CAN bridge.
 
+The standalone [CoreS3-SE firmware](firmware/cores3se/README.md) now also provides direct CAN monitoring, a local touchscreen/web dashboard, authenticated controls and Wi-Fi updates. See its [hardware validation record](firmware/cores3se/VALIDATION.md). The Python/WiCAN application documented below is preserved.
+
 Defaults match the attached WiCAN configuration, except the app now runs its own MQTT broker:
 
 - PC LAN IP / WiCAN MQTT target: `192.168.4.73`
