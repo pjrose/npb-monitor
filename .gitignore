@@ -6,3 +6,8 @@ dist/
 build/
 *.egg-info/
 logs/
+
+# Embedded build outputs and local Wi-Fi credentials
+firmware/cores3se/.pio/
+firmware/cores3se/include/secrets.h
+firmware/cores3se/include/device_token.h
